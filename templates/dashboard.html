@@ -1,0 +1,593 @@
+{% extends 'base.html' %}
+{% load analyzer_extras %}
+
+{% block content %}
+<style>
+    .dashboard-hero {
+        background:
+            radial-gradient(circle at top right, rgba(30, 64, 175, 0.18), transparent 28%),
+            radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.18), transparent 30%),
+            linear-gradient(135deg, #0f172a 0%, #15314b 52%, #0f766e 100%);
+        color: #fff;
+        overflow: hidden;
+        position: relative;
+    }
+    .dashboard-hero .hero-soft {
+        color: rgba(255, 255, 255, 0.72);
+    }
+    .kpi-strip {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 1rem;
+    }
+    .metric-card.metric-accent {
+        background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+    }
+    .metric-card.metric-emerald {
+        background: linear-gradient(135deg, #ecfeff 0%, #ffffff 100%);
+    }
+    .metric-card.metric-slate {
+        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    }
+    .insight-list {
+        display: grid;
+        gap: 0.85rem;
+    }
+    .insight-item {
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 0.9rem;
+        padding: 0.9rem 1rem;
+        background: #fff;
+    }
+    .quick-query {
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: #fff;
+        color: #0f172a;
+    }
+    .quick-query:hover {
+        background: #0f172a;
+        color: #fff;
+        border-color: #0f172a;
+    }
+    .mini-label {
+        font-size: 0.78rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+    .sticky-panel {
+        position: sticky;
+        top: 1rem;
+    }
+    .empty-state {
+        min-height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #64748b;
+        border: 1px dashed rgba(100, 116, 139, 0.4);
+        border-radius: 1rem;
+        background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    }
+    .preview-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        white-space: nowrap;
+    }
+    .chart-box {
+        position: relative;
+        height: 320px;
+        max-height: 320px;
+    }
+    .chart-box canvas {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        display: block;
+    }
+    .ai-chat-trigger {
+        position: fixed;
+        right: 1.25rem;
+        bottom: 1.25rem;
+        z-index: 1050;
+        border-radius: 999px;
+        padding: 0.85rem 1.25rem;
+        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+    }
+    .ai-chat-messages {
+        height: 360px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+    }
+    .chat-bubble {
+        max-width: 88%;
+        padding: 0.85rem 1rem;
+        border-radius: 1rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+    }
+    .chat-bubble.user {
+        align-self: flex-end;
+        background: #0f172a;
+        color: #fff;
+        border-bottom-right-radius: 0.35rem;
+    }
+    .chat-bubble.agent {
+        align-self: flex-start;
+        background: #f8fafc;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        color: #0f172a;
+        border-bottom-left-radius: 0.35rem;
+    }
+</style>
+
+<div class="panel dashboard-hero p-4 p-lg-5 mb-4">
+    <div class="d-flex flex-column flex-xl-row justify-content-between gap-4">
+        <div>
+            <span class="badge rounded-pill text-bg-light mb-3">Live sales intelligence</span>
+            <h1 class="display-6 fw-bold mb-2">Sales dashboard</h1>
+            <p class="hero-soft mb-3">
+                File: <strong>{{ file_name }}</strong>
+            </p>
+            <p class="hero-soft mb-0">
+                Upload qilingan dataset asosida mahsulotlar, hududlar va vaqt bo‘yicha sotuvlar real vaqtga yaqin ko‘rinishda jamlandi.
+            </p>
+        </div>
+        <div class="kpi-strip p-3 p-lg-4 align-self-start">
+            <div class="mini-label text-white-50 mb-2">Detected columns</div>
+            <div class="d-flex flex-wrap gap-2">
+                {% for dimension in analysis.available_dimensions %}
+                    <span class="badge rounded-pill text-bg-light">{{ dimension }}</span>
+                {% empty %}
+                    <span class="badge rounded-pill text-bg-warning text-dark">Limited detection</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="metric-card metric-accent p-4 h-100">
+            <div class="text-uppercase small text-muted">Total sales</div>
+            <div class="metric-value">{{ analysis.total_sales|format_number }}</div>
+            <div class="small text-muted mt-2">Dataset bo‘yicha umumiy revenue</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="metric-card metric-emerald p-4 h-100">
+            <div class="text-uppercase small text-muted">Average sale</div>
+            <div class="metric-value">{{ analysis.average_sale|format_number }}</div>
+            <div class="small text-muted mt-2">Har bir qator uchun o‘rtacha savdo</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="metric-card metric-slate p-4 h-100">
+            <div class="text-uppercase small text-muted">Unique products</div>
+            <div class="metric-value">{{ analysis.product_count|format_number }}</div>
+            <div class="small text-muted mt-2">Takrorlanmas mahsulotlar soni</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="metric-card p-4 h-100">
+            <div class="text-uppercase small text-muted">Rows analyzed</div>
+            <div class="metric-value">{{ analysis.row_count|format_number }}</div>
+            <div class="small text-muted mt-2">Processing qilingan yozuvlar soni</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-4">
+        <div class="panel p-4 h-100 sticky-panel">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h2 class="h5 mb-1">Quick insights</h2>
+                    <p class="text-muted small mb-0">Asosiy xulosalar bir joyda</p>
+                </div>
+                <a href="{% url 'upload' %}" class="btn btn-sm btn-outline-dark">New upload</a>
+            </div>
+            <div class="insight-list">
+                <div class="insight-item">
+                    <div class="mini-label text-muted mb-1">Top product</div>
+                    {% if analysis.top_product %}
+                        <div class="fw-semibold">{{ analysis.top_product.label }}</div>
+                        <div class="text-muted small">{{ analysis.top_product.value|format_number }} sales</div>
+                    {% else %}
+                        <div class="text-muted small">Mahsulot va sales ustunlari topilmadi.</div>
+                    {% endif %}
+                </div>
+                <div class="insight-item">
+                    <div class="mini-label text-muted mb-1">Strongest region</div>
+                    {% if analysis.top_region %}
+                        <div class="fw-semibold">{{ analysis.top_region.label }}</div>
+                        <div class="text-muted small">{{ analysis.top_region.value|format_number }} sales</div>
+                    {% else %}
+                        <div class="text-muted small">Region bo‘yicha tahlil mavjud emas.</div>
+                    {% endif %}
+                </div>
+                <div class="insight-item">
+                    <div class="mini-label text-muted mb-1">Time coverage</div>
+                    {% if analysis.date_range %}
+                        <div class="fw-semibold">{{ analysis.date_range.start }}</div>
+                        <div class="text-muted small">to {{ analysis.date_range.end }}</div>
+                    {% else %}
+                        <div class="text-muted small">Date ustuni aniqlanmagan.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr class="my-4">
+
+            <h3 class="h6 mb-3">Quick queries</h3>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-sm quick-query query-chip" data-query="Top 5 products" type="button">Top 5 products</button>
+                <button class="btn btn-sm quick-query query-chip" data-query="Sales by region" type="button">Sales by region</button>
+                <button class="btn btn-sm quick-query query-chip" data-query="Total revenue" type="button">Total revenue</button>
+                <button class="btn btn-sm quick-query query-chip" data-query="Number of products" type="button">Number of products</button>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="panel p-4 h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h2 class="h5 mb-1">Ask the dataset</h2>
+                            <p class="text-muted small mb-0">Savol yozing yoki pastdagi tayyor variantlardan birini tanlang.</p>
+                        </div>
+                    </div>
+                    <form id="queryForm" class="row g-3">
+                        {% csrf_token %}
+                        <div class="col-12 col-xl-9">
+                            <input type="text" id="queryInput" name="query" class="form-control form-control-lg" placeholder="Masalan: Top 5 products">
+                        </div>
+                        <div class="col-12 col-xl-3 d-grid">
+                            <button type="submit" class="btn btn-dark btn-lg">Run query</button>
+                        </div>
+                    </form>
+                    <div id="queryResult" class="query-result border rounded-4 p-3 mt-3 bg-light-subtle">
+                        Query natijasi shu yerda chiqadi.
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="panel p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h2 class="h5 mb-1">Regional analysis</h2>
+                            <p class="text-muted small mb-0">Hududlar kesimidagi savdo taqsimoti</p>
+                        </div>
+                    </div>
+                    {% if analysis.regional_analysis %}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Region</th>
+                                    <th>Sales</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for item in analysis.regional_analysis %}
+                                    <tr>
+                                        <td>{{ forloop.counter }}</td>
+                                        <td>{{ item.label }}</td>
+                                        <td>{{ item.value|format_number }}</td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <div>
+                                <div class="fw-semibold mb-2">Regional data unavailable</div>
+                                <div>Dataset ichida region va sales ustunlari aniqlanmadi.</div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-6">
+        <div class="panel p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Top-selling products</h2>
+                <span class="badge text-bg-light">Bar chart</span>
+            </div>
+            {% if analysis.top_products %}
+                <div class="chart-box">
+                    <canvas id="topProductsChart"></canvas>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div>
+                        <div class="fw-semibold mb-2">Top product chart unavailable</div>
+                        <div>Product va sales ustunlari kerak bo‘ladi.</div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-xl-6">
+        <div class="panel p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Sales over time</h2>
+                <span class="badge text-bg-light">Line chart</span>
+            </div>
+            {% if analysis.sales_over_time %}
+                <div class="chart-box">
+                    <canvas id="salesOverTimeChart"></canvas>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div>
+                        <div class="fw-semibold mb-2">Timeline chart unavailable</div>
+                        <div>Date va sales ustunlari kerak bo‘ladi.</div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="panel p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="h5 mb-1">Data preview</h2>
+            <p class="text-muted small mb-0">Datasetning birinchi 10 qatori</p>
+        </div>
+        <span class="text-muted small">{{ analysis.preview_columns|length }} columns</span>
+    </div>
+    <div class="table-responsive preview-table">
+        <table class="table table-hover table-bordered align-middle mb-0">
+            <thead class="table-light">
+            <tr>
+                {% for column in analysis.preview_columns %}
+                    <th>{{ column }}</th>
+                {% endfor %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for row in analysis.preview_rows %}
+                <tr>
+                    {% for column in analysis.preview_columns %}
+                        <td>{{ row|get_item:column }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{ analysis.top_products|json_script:"top-products-data" }}
+{{ analysis.sales_over_time|json_script:"sales-over-time-data" }}
+
+<button class="btn btn-dark ai-chat-trigger" type="button" data-bs-toggle="offcanvas" data-bs-target="#aiChatPanel" aria-controls="aiChatPanel">
+    AI bilan chat
+</button>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="aiChatPanel" aria-labelledby="aiChatPanelLabel">
+    <div class="offcanvas-header">
+        <div>
+            <h2 class="offcanvas-title h5 mb-1" id="aiChatPanelLabel">AI bilan chat</h2>
+            <p class="text-muted small mb-0">OpenAI asosidagi dataset assistant</p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body d-flex flex-column">
+        <div id="aiChatMessages" class="ai-chat-messages mb-3">
+            <div class="chat-bubble agent">
+                Salom. Men OpenAI orqali yuklangan fayl asosida javob beraman. Masalan: Total revenue, Top 5 products, Sales by region, Average sale.
+            </div>
+        </div>
+        <form id="aiChatForm" class="mt-auto">
+            {% csrf_token %}
+            <div class="input-group">
+                <input type="text" id="aiChatInput" class="form-control" placeholder="Savolingizni yozing">
+                <button class="btn btn-dark" type="submit">Yuborish</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const topProducts = JSON.parse(document.getElementById('top-products-data').textContent);
+    const salesOverTime = JSON.parse(document.getElementById('sales-over-time-data').textContent);
+
+    const defaultChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            intersect: false,
+            mode: 'index'
+        },
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    };
+
+    const topProductsCanvas = document.getElementById('topProductsChart');
+    const salesOverTimeCanvas = document.getElementById('salesOverTimeChart');
+
+    if (topProductsCanvas && topProducts.length) {
+        new Chart(topProductsCanvas, {
+            type: 'bar',
+            data: {
+                labels: topProducts.map(item => item.label),
+                datasets: [{
+                    data: topProducts.map(item => item.value),
+                    backgroundColor: ['#0f766e', '#1d4ed8', '#ea580c', '#0f172a', '#ca8a04'],
+                    borderRadius: 10
+                }]
+            },
+            options: defaultChartOptions
+        });
+    }
+
+    if (salesOverTimeCanvas && salesOverTime.length) {
+        new Chart(salesOverTimeCanvas, {
+            type: 'line',
+            data: {
+                labels: salesOverTime.map(item => item.label),
+                datasets: [{
+                    data: salesOverTime.map(item => item.value),
+                    borderColor: '#111827',
+                    backgroundColor: 'rgba(17, 24, 39, 0.12)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: defaultChartOptions
+        });
+    }
+
+    const queryForm = document.getElementById('queryForm');
+    const queryResult = document.getElementById('queryResult');
+    const csrfToken = queryForm.querySelector('[name=csrfmiddlewaretoken]').value;
+    const queryInput = document.getElementById('queryInput');
+    const queryChips = document.querySelectorAll('.query-chip');
+    const aiChatForm = document.getElementById('aiChatForm');
+    const aiChatInput = document.getElementById('aiChatInput');
+    const aiChatMessages = document.getElementById('aiChatMessages');
+
+    function renderQueryResult(result) {
+        if (result.type === 'list') {
+            queryResult.innerHTML = `
+                <h3 class="h6">${result.title}</h3>
+                <ul class="mb-0">${result.items.map(item => `<li>${item}</li>`).join('')}</ul>
+            `;
+            return;
+        }
+
+        if (result.type === 'table') {
+            queryResult.innerHTML = `
+                <h3 class="h6">${result.title}</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>${result.headers.map(header => `<th>${header}</th>`).join('')}</tr>
+                        </thead>
+                        <tbody>
+                            ${result.rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            return;
+        }
+
+        queryResult.textContent = result.message;
+    }
+
+    async function submitQuery(queryText) {
+        queryResult.textContent = 'Processing query...';
+
+        const formData = new FormData();
+        formData.append('query', queryText);
+
+        const response = await fetch("{% url 'query' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+            queryResult.textContent = payload.error || 'Unable to process the query.';
+            return;
+        }
+
+        renderQueryResult(payload.result);
+    }
+
+    queryForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await submitQuery(queryInput.value);
+    });
+
+    queryChips.forEach((chip) => {
+        chip.addEventListener('click', async () => {
+            const query = chip.dataset.query;
+            queryInput.value = query;
+            await submitQuery(query);
+        });
+    });
+
+    function appendChatMessage(text, sender) {
+        const bubble = document.createElement('div');
+        bubble.className = `chat-bubble ${sender}`;
+        bubble.textContent = text;
+        aiChatMessages.appendChild(bubble);
+        aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+    }
+
+    function renderChatResult(result) {
+        if (result.type === 'list') {
+            appendChatMessage(`${result.title}\n- ${result.items.join('\n- ')}`, 'agent');
+            return;
+        }
+
+        if (result.type === 'table') {
+            const rows = result.rows.map((row) => row.join(': ')).join('\n');
+            appendChatMessage(`${result.title}\n${rows}`, 'agent');
+            return;
+        }
+
+        appendChatMessage(result.message, 'agent');
+    }
+
+    aiChatForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const message = aiChatInput.value.trim();
+        if (!message) {
+            return;
+        }
+
+        appendChatMessage(message, 'user');
+        aiChatInput.value = '';
+
+        const formData = new FormData();
+        formData.append('message', message);
+
+        const response = await fetch("{% url 'ai_chat' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+            appendChatMessage(payload.error || 'AI chat hozir javob bera olmadi.', 'agent');
+            return;
+        }
+
+        renderChatResult(payload.result);
+    });
+</script>
+{% endblock %}
